@@ -425,18 +425,18 @@ func (c *CareCase) CompleteExecution(actor, requestID string, now time.Time) err
 		}
 	}
 	open := c.openNonconformities()
-	// 先把整改结果写回聚合，再统一判断其它完工条件；当后续条件失败时，
-	// 这些指针指向验收记录，因而失败请求也会留下已销项状态。
-	for id, batches := range remediationBatches(open, c.Executions) {
+	remediationBatchesByIssue := remediationBatches(open, c.Executions)
+	for id, batches := range remediationBatchesByIssue {
 		if len(batches) == 0 {
 			missing = append(missing, "待整改："+id)
-			continue
 		}
-		open[id].ResolvedByBatches = append(open[id].ResolvedByBatches, batches...)
-		open[id].Status = "resolved"
 	}
 	if len(missing) > 0 {
 		return invalid("completion", "尚未满足完工条件："+strings.Join(missing, "、"))
+	}
+	for id, batches := range remediationBatchesByIssue {
+		open[id].ResolvedByBatches = append(open[id].ResolvedByBatches, batches...)
+		open[id].Status = "resolved"
 	}
 	from := c.Status
 	c.Status = StatusPendingAcceptance
