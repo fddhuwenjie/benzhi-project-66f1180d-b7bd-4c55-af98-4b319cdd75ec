@@ -218,14 +218,26 @@ func (r *FileRepository) Commit(_ context.Context, next *domain.CareCase, expect
 	if err != nil {
 		return nil, false, fmt.Errorf("追加审计日志: %w", err)
 	}
+	priorRequests := make(map[string]string)
 	for _, event := range newEvents {
-		if event.RequestID != "" {
-			r.requests[event.RequestID] = next.ID
+		if event.RequestID == "" {
+			continue
 		}
+		if _, recorded := priorRequests[event.RequestID]; !recorded {
+			priorRequests[event.RequestID] = r.requests[event.RequestID]
+		}
+		r.requests[event.RequestID] = next.ID
 	}
 	if err := writeSnapshotAtomically(r.snapshotPath(next.ID), next); err != nil {
 		if rollbackErr := truncateAudit(auditPath, previousSize); rollbackErr != nil {
 			return nil, false, fmt.Errorf("保存快照失败: %v；回滚审计日志失败: %w", err, rollbackErr)
+		}
+		for requestID, owner := range priorRequests {
+			if owner == "" {
+				delete(r.requests, requestID)
+			} else {
+				r.requests[requestID] = owner
+			}
 		}
 		return nil, false, fmt.Errorf("保存快照: %w", err)
 	}
