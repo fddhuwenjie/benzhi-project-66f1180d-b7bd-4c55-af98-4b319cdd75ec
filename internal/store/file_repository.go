@@ -113,7 +113,10 @@ func (r *FileRepository) reconcileAudit(c *domain.CareCase) error {
 	return nil
 }
 
-func (r *FileRepository) Get(_ context.Context, id string) (*domain.CareCase, error) {
+func (r *FileRepository) Get(ctx context.Context, id string) (*domain.CareCase, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	c, ok := r.cases[id]
@@ -123,7 +126,10 @@ func (r *FileRepository) Get(_ context.Context, id string) (*domain.CareCase, er
 	return cloneCase(c)
 }
 
-func (r *FileRepository) List(_ context.Context) ([]*domain.CareCase, error) {
+func (r *FileRepository) List(ctx context.Context) ([]*domain.CareCase, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	result := make([]*domain.CareCase, 0, len(r.cases))
@@ -138,7 +144,10 @@ func (r *FileRepository) List(_ context.Context) ([]*domain.CareCase, error) {
 	return result, nil
 }
 
-func (r *FileRepository) LookupRequest(_ context.Context, requestID string) (*domain.CareCase, bool, error) {
+func (r *FileRepository) LookupRequest(ctx context.Context, requestID string) (*domain.CareCase, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, false, err
+	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	id, ok := r.requests[requestID]
@@ -153,7 +162,10 @@ func (r *FileRepository) LookupRequest(_ context.Context, requestID string) (*do
 	return copy, true, err
 }
 
-func (r *FileRepository) LookupActiveTreeCode(_ context.Context, treeCode string) (*domain.CareCase, bool, error) {
+func (r *FileRepository) LookupActiveTreeCode(ctx context.Context, treeCode string) (*domain.CareCase, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, false, err
+	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	code := strings.TrimSpace(treeCode)
@@ -166,7 +178,10 @@ func (r *FileRepository) LookupActiveTreeCode(_ context.Context, treeCode string
 	return nil, false, nil
 }
 
-func (r *FileRepository) Commit(_ context.Context, next *domain.CareCase, expected int64, requestID string) (*domain.CareCase, bool, error) {
+func (r *FileRepository) Commit(ctx context.Context, next *domain.CareCase, expected int64, requestID string) (*domain.CareCase, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, false, err
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if owner, ok := r.requests[requestID]; ok {
