@@ -399,13 +399,13 @@ func (c *CareCase) CompleteExecution(actor, requestID string, now time.Time) err
 	if p == nil {
 		return invalid("plan", "没有已批准的养护方案")
 	}
-	measureHits, controlHits := map[string]bool{}, map[string]bool{}
+	measureAvailable, controlHits := map[string]int{}, map[string]bool{}
 	for _, execution := range c.Executions {
 		if execution.PlanVersion != p.Version {
 			continue
 		}
 		for _, measure := range execution.ActualMeasures {
-			measureHits[strings.TrimSpace(measure)] = true
+			measureAvailable[strings.TrimSpace(measure)]++
 		}
 		for _, check := range execution.ControlChecks {
 			if check.Passed {
@@ -415,8 +415,11 @@ func (c *CareCase) CompleteExecution(actor, requestID string, now time.Time) err
 	}
 	missing := make([]string, 0)
 	for _, measure := range p.Measures {
-		if !measureHits[strings.TrimSpace(measure.Title)] {
+		title := strings.TrimSpace(measure.Title)
+		if measureAvailable[title] <= 0 {
 			missing = append(missing, "措施："+measure.Title)
+		} else {
+			measureAvailable[title]--
 		}
 	}
 	for _, control := range p.SafetyControls {
