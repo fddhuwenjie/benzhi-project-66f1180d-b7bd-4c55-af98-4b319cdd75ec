@@ -22,8 +22,9 @@ type CareCase struct {
 	RiskAssessments []RiskAssessment   `json:"risk_assessments,omitempty"`
 	Plans           []CarePlan         `json:"plans,omitempty"`
 	Executions      []ExecutionRecord  `json:"executions,omitempty"`
-	Acceptances     []AcceptanceRecord `json:"acceptances,omitempty"`
-	AuditEvents     []AuditEvent       `json:"audit_events"`
+	Acceptances     []AcceptanceRecord       `json:"acceptances,omitempty"`
+	AuditEvents     []AuditEvent             `json:"audit_events"`
+	RequestRecords  map[string]RequestRecord `json:"request_records,omitempty"`
 }
 
 type CaseProfileInput struct {
@@ -84,6 +85,7 @@ func NewCareCase(in NewCaseInput) (*CareCase, error) {
 		ID: in.ID, TreeCode: strings.TrimSpace(in.TreeCode), Species: strings.TrimSpace(in.Species),
 		Location: strings.TrimSpace(in.Location), OwnerName: strings.TrimSpace(in.OwnerName),
 		DueDate: in.DueDate, Status: StatusDraft, CreatedAt: in.Now.UTC(), UpdatedAt: in.Now.UTC(),
+		RequestRecords: map[string]RequestRecord{},
 	}
 	c.record("case.created", in.Actor, StatusDraft, StatusDraft, "创建养护任务草稿", in.RequestID, in.Now)
 	return c, nil

@@ -173,7 +173,19 @@ func (r *FileRepository) Commit(_ context.Context, next *domain.CareCase, expect
 		if owner != next.ID {
 			return nil, false, &domain.ValidationError{Field: "request_id", Message: "request_id 已用于其他任务"}
 		}
-		copy, err := cloneCase(r.cases[owner])
+		// Guard against concurrent replays that slipped past LookupRequest:
+		// only reuse the prior result when the caller recorded the same
+		// operation and payload fingerprint. Otherwise surface a
+		// deterministic request_id validation error.
+		prior := r.cases[owner]
+		if next.RequestRecords != nil {
+			incoming, hasIncoming := next.RequestRecords[requestID]
+			priorRecord, hasPrior := lookupRecordOn(prior, requestID)
+			if hasPrior && hasIncoming && (incoming.Operation != priorRecord.Operation || incoming.Fingerprint != priorRecord.Fingerprint) {
+				return nil, false, &domain.ValidationError{Field: "request_id", Message: "request_id 已用于其他操作或请求负载不一致"}
+			}
+		}
+		copy, err := cloneCase(prior)
 		return copy, true, err
 	}
 	current, exists := r.cases[next.ID]
@@ -240,6 +252,14 @@ func (r *FileRepository) Commit(_ context.Context, next *domain.CareCase, expect
 
 func (r *FileRepository) snapshotPath(id string) string { return filepath.Join(r.snapDir, id+".json") }
 func (r *FileRepository) auditPath(id string) string    { return filepath.Join(r.auditDir, id+".jsonl") }
+
+func lookupRecordOn(c *domain.CareCase, requestID string) (domain.RequestRecord, bool) {
+	if c == nil || c.RequestRecords == nil {
+		return domain.RequestRecord{}, false
+	}
+	rec, ok := c.RequestRecords[requestID]
+	return rec, ok
+}
 
 func eventsAfter(events []domain.AuditEvent, revision int64) []domain.AuditEvent {
 	result := make([]domain.AuditEvent, 0)

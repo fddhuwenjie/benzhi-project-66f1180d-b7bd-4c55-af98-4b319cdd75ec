@@ -60,3 +60,8 @@ type AuditEvent struct {
 	RequestID  string    `json:"request_id"`
 	Revision   int64     `json:"revision"`
 }
+
+type RequestRecord struct {
+	Operation   string `json:"operation"`
+	Fingerprint string `json:"fingerprint"`
+}

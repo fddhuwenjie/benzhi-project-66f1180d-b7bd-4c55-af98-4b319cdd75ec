@@ -44,9 +44,15 @@ func (s *Service) CreateCase(ctx context.Context, cmd CreateCaseCommand) (*domai
 	if strings.TrimSpace(cmd.RequestID) == "" {
 		return nil, &domain.ValidationError{Field: "request_id", Message: "request_id 不能为空"}
 	}
+	if strings.TrimSpace(cmd.Actor) == "" {
+		return nil, &domain.ValidationError{Field: "actor_name", Message: "操作人不能为空"}
+	}
 	if prior, ok, err := s.repo.LookupRequest(ctx, cmd.RequestID); err != nil {
 		return nil, err
 	} else if ok {
+		if err := verifyReplay(prior, cmd.RequestID, opCreateCase, fingerprintCreate(cmd)); err != nil {
+			return nil, err
+		}
 		return prior, nil
 	}
 	if existing, ok, err := s.repo.LookupActiveTreeCode(ctx, strings.TrimSpace(cmd.TreeCode)); err != nil {
@@ -62,18 +68,19 @@ func (s *Service) CreateCase(ctx context.Context, cmd CreateCaseCommand) (*domai
 	if err != nil {
 		return nil, err
 	}
+	recordRequest(c, cmd.RequestID, opCreateCase, fingerprintCreate(cmd))
 	result, _, err := s.repo.Commit(ctx, c, 0, cmd.RequestID)
 	return result, err
 }
 
 func (s *Service) ReviseCase(ctx context.Context, cmd ReviseCaseCommand) (*domain.CareCase, error) {
-	return s.changeOptional(ctx, cmd.CaseID, cmd.CommandMeta, func(c *domain.CareCase, now time.Time) (bool, error) {
+	return s.changeOptional(ctx, cmd.CaseID, cmd.CommandMeta, opReviseCase, fingerprintRevise(cmd), func(c *domain.CareCase, now time.Time) (bool, error) {
 		return c.ReviseProfile(domain.CaseProfileInput{Species: cmd.Species, Location: cmd.Location, OwnerName: cmd.OwnerName, DueDate: cmd.DueDate}, cmd.Actor, cmd.RequestID, now)
 	})
 }
 
 func (s *Service) SubmitSurvey(ctx context.Context, cmd SubmitSurveyCommand) (*domain.CareCase, error) {
-	return s.change(ctx, cmd.CaseID, cmd.CommandMeta, func(c *domain.CareCase, now time.Time) error {
+	return s.change(ctx, cmd.CaseID, cmd.CommandMeta, opSubmitSurvey, fingerprintSurvey(cmd), func(c *domain.CareCase, now time.Time) error {
 		return c.SubmitSurveyAt(domain.ConditionSurvey{
 			ID: s.ids.NewID("survey"), Crown: cmd.Crown, Trunk: cmd.Trunk, RootZone: cmd.RootZone,
 			Environment: cmd.Environment, ObservedAt: cmd.ObservedAt, Observer: cmd.Observer, PhotoRefs: cmd.PhotoRefs,
@@ -82,7 +89,7 @@ func (s *Service) SubmitSurvey(ctx context.Context, cmd SubmitSurveyCommand) (*d
 }
 
 func (s *Service) AssessRisk(ctx context.Context, cmd AssessRiskCommand) (*domain.CareCase, error) {
-	return s.change(ctx, cmd.CaseID, cmd.CommandMeta, func(c *domain.CareCase, now time.Time) error {
+	return s.change(ctx, cmd.CaseID, cmd.CommandMeta, opAssessRisk, fingerprintAssess(cmd), func(c *domain.CareCase, now time.Time) error {
 		if c.Survey == nil {
 			return &domain.ValidationError{Field: "survey", Message: "必须先提交现状记录"}
 		}
@@ -98,7 +105,7 @@ func (s *Service) AssessRisk(ctx context.Context, cmd AssessRiskCommand) (*domai
 }
 
 func (s *Service) SavePlan(ctx context.Context, cmd SavePlanCommand) (*domain.CareCase, error) {
-	return s.change(ctx, cmd.CaseID, cmd.CommandMeta, func(c *domain.CareCase, now time.Time) error {
+	return s.change(ctx, cmd.CaseID, cmd.CommandMeta, opSavePlan, fingerprintSavePlan(cmd), func(c *domain.CareCase, now time.Time) error {
 		return c.SavePlanForAssessment(domain.CarePlan{
 			ID: s.ids.NewID("plan"), Measures: cmd.Measures, Materials: cmd.Materials,
 			WorkWindow: cmd.WorkWindow, SafetyControls: cmd.SafetyControls,
@@ -109,19 +116,19 @@ func (s *Service) SavePlan(ctx context.Context, cmd SavePlanCommand) (*domain.Ca
 }
 
 func (s *Service) SubmitPlan(ctx context.Context, cmd SubmitPlanCommand) (*domain.CareCase, error) {
-	return s.change(ctx, cmd.CaseID, cmd.CommandMeta, func(c *domain.CareCase, now time.Time) error {
+	return s.change(ctx, cmd.CaseID, cmd.CommandMeta, opSubmitPlan, fingerprintSubmitPlan(cmd), func(c *domain.CareCase, now time.Time) error {
 		return c.SubmitPlanCovered(cmd.Actor, cmd.RequestID, now)
 	})
 }
 
 func (s *Service) ReviewPlan(ctx context.Context, cmd ReviewPlanCommand) (*domain.CareCase, error) {
-	return s.change(ctx, cmd.CaseID, cmd.CommandMeta, func(c *domain.CareCase, now time.Time) error {
+	return s.change(ctx, cmd.CaseID, cmd.CommandMeta, opReviewPlan, fingerprintReviewPlan(cmd), func(c *domain.CareCase, now time.Time) error {
 		return c.ReviewPlanChecklist(cmd.Approved, cmd.Opinions, cmd.Reviewer, cmd.RequestID, now)
 	})
 }
 
 func (s *Service) RecordExecution(ctx context.Context, cmd RecordExecutionCommand) (*domain.CareCase, error) {
-	return s.change(ctx, cmd.CaseID, cmd.CommandMeta, func(c *domain.CareCase, now time.Time) error {
+	return s.change(ctx, cmd.CaseID, cmd.CommandMeta, opRecordExecution, fingerprintRecordExecution(cmd), func(c *domain.CareCase, now time.Time) error {
 		return c.RegisterExecution(domain.ExecutionRecord{
 			ID: s.ids.NewID("execution"), PerformedAt: cmd.PerformedAt, CrewNames: cmd.CrewNames,
 			ActualMeasures: cmd.ActualMeasures, ControlChecks: cmd.ControlChecks,
@@ -131,13 +138,13 @@ func (s *Service) RecordExecution(ctx context.Context, cmd RecordExecutionComman
 }
 
 func (s *Service) CompleteExecution(ctx context.Context, cmd CompleteExecutionCommand) (*domain.CareCase, error) {
-	return s.change(ctx, cmd.CaseID, cmd.CommandMeta, func(c *domain.CareCase, now time.Time) error {
+	return s.change(ctx, cmd.CaseID, cmd.CommandMeta, opCompleteExecution, fingerprintCompleteExecution(cmd), func(c *domain.CareCase, now time.Time) error {
 		return c.CompleteExecution(cmd.Actor, cmd.RequestID, now)
 	})
 }
 
 func (s *Service) Accept(ctx context.Context, cmd AcceptCommand) (*domain.CareCase, error) {
-	return s.change(ctx, cmd.CaseID, cmd.CommandMeta, func(c *domain.CareCase, now time.Time) error {
+	return s.change(ctx, cmd.CaseID, cmd.CommandMeta, opAccept, fingerprintAccept(cmd), func(c *domain.CareCase, now time.Time) error {
 		return c.AcceptStructured(domain.AcceptanceRecord{
 			Passed: cmd.Passed, Inspector: cmd.Inspector, InspectedAt: cmd.InspectedAt,
 			CriterionResults: cmd.CriterionResults, Items: cmd.Nonconformities, Notes: cmd.Notes,
@@ -156,7 +163,7 @@ func (s *Service) RiskPreview(ctx context.Context, caseID string) (risk.Result, 
 	return s.risk.Evaluate(*c.Survey), nil
 }
 
-func (s *Service) change(ctx context.Context, caseID string, meta CommandMeta, mutate func(*domain.CareCase, time.Time) error) (*domain.CareCase, error) {
+func (s *Service) change(ctx context.Context, caseID string, meta CommandMeta, operation, fingerprint string, mutate func(*domain.CareCase, time.Time) error) (*domain.CareCase, error) {
 	if err := validateMeta(meta); err != nil {
 		return nil, err
 	}
@@ -168,6 +175,9 @@ func (s *Service) change(ctx context.Context, caseID string, meta CommandMeta, m
 	} else if ok {
 		if prior.ID != caseID {
 			return nil, &domain.ValidationError{Field: "request_id", Message: "request_id 已用于其他任务"}
+		}
+		if err := verifyReplay(prior, meta.RequestID, operation, fingerprint); err != nil {
+			return nil, err
 		}
 		return prior, nil
 	}
@@ -181,11 +191,12 @@ func (s *Service) change(ctx context.Context, caseID string, meta CommandMeta, m
 	if err := mutate(c, s.clock.Now()); err != nil {
 		return nil, err
 	}
+	recordRequest(c, meta.RequestID, operation, fingerprint)
 	result, _, err := s.repo.Commit(ctx, c, meta.ExpectedRevision, meta.RequestID)
 	return result, err
 }
 
-func (s *Service) changeOptional(ctx context.Context, caseID string, meta CommandMeta, mutate func(*domain.CareCase, time.Time) (bool, error)) (*domain.CareCase, error) {
+func (s *Service) changeOptional(ctx context.Context, caseID string, meta CommandMeta, operation, fingerprint string, mutate func(*domain.CareCase, time.Time) (bool, error)) (*domain.CareCase, error) {
 	if err := validateMeta(meta); err != nil {
 		return nil, err
 	}
@@ -197,6 +208,9 @@ func (s *Service) changeOptional(ctx context.Context, caseID string, meta Comman
 	} else if ok {
 		if prior.ID != caseID {
 			return nil, &domain.ValidationError{Field: "request_id", Message: "request_id 已用于其他任务"}
+		}
+		if err := verifyReplay(prior, meta.RequestID, operation, fingerprint); err != nil {
+			return nil, err
 		}
 		return prior, nil
 	}
@@ -214,6 +228,7 @@ func (s *Service) changeOptional(ctx context.Context, caseID string, meta Comman
 	if !changed {
 		return c, nil
 	}
+	recordRequest(c, meta.RequestID, operation, fingerprint)
 	result, _, err := s.repo.Commit(ctx, c, meta.ExpectedRevision, meta.RequestID)
 	return result, err
 }
