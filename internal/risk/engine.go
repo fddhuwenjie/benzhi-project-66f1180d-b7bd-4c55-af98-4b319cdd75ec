@@ -3,7 +3,6 @@ package risk
 import (
 	"fmt"
 	"strings"
-	"sync"
 
 	"benzhi-project-66f1180d-b7bd-4c55-af98-4b319cdd75ec/internal/domain"
 )
@@ -15,12 +14,9 @@ type conditionRule struct {
 	title, suggestion string
 }
 
-// Engine reuses result buffers between evaluations to avoid short-lived allocations.
-type Engine struct {
-	mu            sync.Mutex
-	factorBuf     []domain.RiskFactor
-	suggestionBuf []string
-}
+// Engine is a stateless risk evaluator; each Evaluate call returns a Result
+// whose slices are independent and remain stable after subsequent calls.
+type Engine struct{}
 
 var conditionRules = []conditionRule{
 	{"树冠", "crown_condition.condition", domain.ConditionAttention, 10, "树冠出现轻度异常", "安排枯枝清理并持续监测树势"},
@@ -35,11 +31,9 @@ var conditionRules = []conditionRule{
 }
 
 func (e *Engine) Evaluate(s domain.ConditionSurvey) Result {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	e.factorBuf = e.factorBuf[:0]
-	e.suggestionBuf = e.suggestionBuf[:0]
-	result := Result{Factors: e.factorBuf, Suggestions: e.suggestionBuf}
+	factors := make([]domain.RiskFactor, 0)
+	suggestions := make([]string, 0)
+	result := Result{Factors: factors, Suggestions: suggestions}
 	levels := map[string]domain.ConditionLevel{"树冠": s.Crown.Condition, "树干": s.Trunk.Condition, "根区": s.RootZone.Condition}
 	notes := map[string]string{"树冠": s.Crown.Notes, "树干": s.Trunk.Notes, "根区": s.RootZone.Notes}
 	for _, rule := range conditionRules {
@@ -79,7 +73,6 @@ func (e *Engine) Evaluate(s domain.ConditionSurvey) Result {
 		result.Suggestions = append(result.Suggestions, "按常规周期巡查养护")
 	}
 	result.Groups = groupFactors(result.Factors)
-	e.factorBuf, e.suggestionBuf = result.Factors, result.Suggestions
 	return result
 }
 
