@@ -15,6 +15,7 @@ type Service struct {
 	risk  *risk.Engine
 	clock Clock
 	ids   IDGenerator
+	dashboardStats DashboardStatistics
 }
 
 func NewService(repo CaseRepository, riskEngine *risk.Engine, clock Clock, ids IDGenerator) *Service {
@@ -257,7 +258,7 @@ func (s *Service) QueryDashboard(ctx context.Context, query CaseQuery) (Dashboar
 	}
 	query.Keyword, query.OwnerName, query.Status = strings.TrimSpace(query.Keyword), strings.TrimSpace(query.OwnerName), strings.TrimSpace(query.Status)
 	query.RiskLevel, query.DeadlineLevel = strings.TrimSpace(query.RiskLevel), strings.TrimSpace(query.DeadlineLevel)
-	result := Dashboard{Cases: make([]CaseSummary, 0, len(cases)), Counts: map[string]int{}, Query: query, Statistics: DashboardStatistics{Statuses: map[string]int{}, RiskLevels: map[string]int{}, DeadlineLevels: map[string]int{}, NextActions: map[string]int{}}}
+	result := Dashboard{Cases: make([]CaseSummary, 0, len(cases)), Counts: map[string]int{}, Query: query, Statistics: s.dashboardStatistics()}
 	now := s.clock.Now()
 	for _, c := range cases {
 		deadline, deadlineLabel := classifyDeadline(c, now)
@@ -297,6 +298,20 @@ func (s *Service) QueryDashboard(ctx context.Context, query CaseQuery) (Dashboar
 		return a.ID < b.ID
 	})
 	return result, nil
+}
+
+func (s *Service) dashboardStatistics() DashboardStatistics {
+	if s.dashboardStats.Statuses == nil {
+		s.dashboardStats.Statuses = map[string]int{}
+		s.dashboardStats.RiskLevels = map[string]int{}
+		s.dashboardStats.DeadlineLevels = map[string]int{}
+		s.dashboardStats.NextActions = map[string]int{}
+	}
+	clear(s.dashboardStats.Statuses)
+	clear(s.dashboardStats.RiskLevels)
+	clear(s.dashboardStats.DeadlineLevels)
+	clear(s.dashboardStats.NextActions)
+	return s.dashboardStats
 }
 
 func classifyDeadline(c *domain.CareCase, now time.Time) (string, string) {
