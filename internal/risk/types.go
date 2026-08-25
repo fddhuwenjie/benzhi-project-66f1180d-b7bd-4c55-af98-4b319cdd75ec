@@ -10,6 +10,4 @@ type Result struct {
 	Groups      []domain.RiskGroupResult `json:"groups"`
 }
 
-type Engine struct{}
-
 func NewEngine() *Engine { return &Engine{} }
