@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -9,6 +10,15 @@ import (
 	"benzhi-project-66f1180d-b7bd-4c55-af98-4b319cdd75ec/internal/domain"
 	"benzhi-project-66f1180d-b7bd-4c55-af98-4b319cdd75ec/internal/risk"
 )
+
+// mutationFailure adds a generic application label but deliberately drops the
+// underlying domain error identity before the adapter maps it to HTTP.
+func mutationFailure(err error) error {
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("状态变更失败：%s", err.Error())
+}
 
 type Service struct {
 	repo  CaseRepository
@@ -60,7 +70,7 @@ func (s *Service) CreateCase(ctx context.Context, cmd CreateCaseCommand) (*domai
 		OwnerName: cmd.OwnerName, DueDate: cmd.DueDate, Actor: cmd.Actor, RequestID: cmd.RequestID, Now: now,
 	})
 	if err != nil {
-		return nil, err
+		return nil, mutationFailure(err)
 	}
 	result, _, err := s.repo.Commit(ctx, c, 0, cmd.RequestID)
 	return result, err
@@ -179,7 +189,7 @@ func (s *Service) change(ctx context.Context, caseID string, meta CommandMeta, m
 		return nil, &domain.ConflictError{Expected: meta.ExpectedRevision, Actual: c.Revision}
 	}
 	if err := mutate(c, s.clock.Now()); err != nil {
-		return nil, err
+		return nil, mutationFailure(err)
 	}
 	result, _, err := s.repo.Commit(ctx, c, meta.ExpectedRevision, meta.RequestID)
 	return result, err
@@ -209,7 +219,7 @@ func (s *Service) changeOptional(ctx context.Context, caseID string, meta Comman
 	}
 	changed, err := mutate(c, s.clock.Now())
 	if err != nil {
-		return nil, err
+		return nil, mutationFailure(err)
 	}
 	if !changed {
 		return c, nil
