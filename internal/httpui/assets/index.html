@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>古树养护闭环核验台</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark" aria-hidden="true">古</span><div><strong>古树养护闭环核验台</strong><small>城市古树养护作业台账</small></div></div>
+    <div class="top-actions"><span id="syncState" class="sync-state">数据已同步</span><button class="icon-button" id="refreshButton" title="刷新数据" aria-label="刷新数据">↻</button></div>
+  </header>
+  <main class="workspace">
+    <aside class="sidebar">
+      <div class="sidebar-heading"><div><span class="eyebrow">任务台账</span><strong id="caseCount">0 项任务</strong></div><button id="newCaseButton" class="primary small">＋ 新建</button></div>
+      <form id="filterForm" class="query-filters">
+        <input name="keyword" aria-label="树木编号或位置关键词" placeholder="编号或位置">
+        <select name="owner_name" aria-label="责任人"><option value="">全部责任人</option></select>
+        <div class="query-row"><select name="risk_level" aria-label="风险等级"><option value="">全部风险</option><option value="critical">重大风险</option><option value="high">高风险</option><option value="medium">中风险</option><option value="low">低风险</option></select><select name="deadline_level" aria-label="期限分级"><option value="">全部期限</option><option value="overdue">已逾期</option><option value="due_soon">七日内到期</option><option value="normal">正常</option></select></div>
+      </form>
+      <div class="filters" role="tablist" aria-label="任务状态筛选">
+        <button class="filter active" data-status="all">全部 <span id="count-all">0</span></button>
+        <button class="filter" data-status="pending_review">待审核 <span id="count-pending_review">0</span></button>
+        <button class="filter" data-status="pending_acceptance">待验收 <span id="count-pending_acceptance">0</span></button>
+        <button class="filter" data-status="closed">已关闭 <span id="count-closed">0</span></button>
+      </div>
+      <div id="caseList" class="case-list" aria-live="polite"></div>
+    </aside>
+    <section id="mainPanel" class="main-panel">
+      <div class="empty-state"><div class="tree-ring" aria-hidden="true">年</div><h1>选择一项养护任务</h1><p>从左侧台账进入现状采集、方案审核、实施核验与验收流程。</p><button class="primary" data-action="new-case">创建第一项任务</button></div>
+    </section>
+  </main>
+  <dialog id="modal"><form method="dialog" class="modal-shell"><header><h2 id="modalTitle">新建任务</h2><button value="cancel" class="icon-button" aria-label="关闭">×</button></header><div id="modalBody"></div></form></dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <template id="newCaseTemplate">
+    <form id="newCaseForm" class="form-grid">
+      <label>树木编号<input name="tree_code" required maxlength="60" placeholder="例如 GT-2026-018"></label>
+      <label>树种<input name="species" required maxlength="80" placeholder="例如 银杏"></label>
+      <label class="span-2">位置<input name="location" required maxlength="200" placeholder="道路、街区及具体点位"></label>
+      <label>责任人<input name="owner_name" required maxlength="60"></label>
+      <label>任务期限<input name="due_date" type="date" required></label>
+      <label class="span-2">建档操作人<input name="actor_name" required maxlength="60"></label>
+      <div class="form-actions span-2"><button type="button" class="secondary" data-close>取消</button><button class="primary" type="submit">创建草稿</button></div>
+    </form>
+  </template>
+</body>
+</html>
