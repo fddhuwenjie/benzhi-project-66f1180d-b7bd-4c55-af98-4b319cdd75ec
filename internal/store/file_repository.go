@@ -218,6 +218,11 @@ func (r *FileRepository) Commit(_ context.Context, next *domain.CareCase, expect
 	if err != nil {
 		return nil, false, fmt.Errorf("追加审计日志: %w", err)
 	}
+	for _, event := range newEvents {
+		if event.RequestID != "" {
+			r.requests[event.RequestID] = next.ID
+		}
+	}
 	if err := writeSnapshotAtomically(r.snapshotPath(next.ID), next); err != nil {
 		if rollbackErr := truncateAudit(auditPath, previousSize); rollbackErr != nil {
 			return nil, false, fmt.Errorf("保存快照失败: %v；回滚审计日志失败: %w", err, rollbackErr)
@@ -229,11 +234,6 @@ func (r *FileRepository) Commit(_ context.Context, next *domain.CareCase, expect
 		return nil, false, err
 	}
 	r.cases[next.ID] = copy
-	for _, event := range newEvents {
-		if event.RequestID != "" {
-			r.requests[event.RequestID] = next.ID
-		}
-	}
 	result, err := cloneCase(copy)
 	return result, false, err
 }
