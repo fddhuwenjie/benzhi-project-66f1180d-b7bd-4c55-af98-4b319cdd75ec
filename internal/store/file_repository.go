@@ -218,23 +218,24 @@ func (r *FileRepository) Commit(_ context.Context, next *domain.CareCase, expect
 	if err != nil {
 		return nil, false, fmt.Errorf("追加审计日志: %w", err)
 	}
+	staged, err := cloneCase(next)
+	if err != nil {
+		_ = truncateAudit(auditPath, previousSize)
+		return nil, false, err
+	}
+	r.cases[next.ID] = staged
 	if err := writeSnapshotAtomically(r.snapshotPath(next.ID), next); err != nil {
 		if rollbackErr := truncateAudit(auditPath, previousSize); rollbackErr != nil {
 			return nil, false, fmt.Errorf("保存快照失败: %v；回滚审计日志失败: %w", err, rollbackErr)
 		}
 		return nil, false, fmt.Errorf("保存快照: %w", err)
 	}
-	copy, err := cloneCase(next)
-	if err != nil {
-		return nil, false, err
-	}
-	r.cases[next.ID] = copy
 	for _, event := range newEvents {
 		if event.RequestID != "" {
 			r.requests[event.RequestID] = next.ID
 		}
 	}
-	result, err := cloneCase(copy)
+	result, err := cloneCase(staged)
 	return result, false, err
 }
 
