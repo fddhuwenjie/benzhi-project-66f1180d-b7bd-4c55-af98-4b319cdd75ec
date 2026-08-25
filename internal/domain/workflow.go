@@ -425,21 +425,15 @@ func (c *CareCase) CompleteExecution(actor, requestID string, now time.Time) err
 		}
 	}
 	open := c.openNonconformities()
-	for id := range open {
-		resolved := false
-		for i := range c.Executions {
-			for _, remediation := range c.Executions[i].Remediations {
-				if remediation.NonconformityID == id && len(c.Executions[i].EvidenceRefs) > 0 {
-					resolved = true
-					open[id].ResolvedByBatches = append(open[id].ResolvedByBatches, c.Executions[i].BatchNumber)
-				}
-			}
-		}
-		if !resolved {
+	// 先把整改结果写回聚合，再统一判断其它完工条件；当后续条件失败时，
+	// 这些指针指向验收记录，因而失败请求也会留下已销项状态。
+	for id, batches := range remediationBatches(open, c.Executions) {
+		if len(batches) == 0 {
 			missing = append(missing, "待整改："+id)
-		} else {
-			open[id].Status = "resolved"
+			continue
 		}
+		open[id].ResolvedByBatches = append(open[id].ResolvedByBatches, batches...)
+		open[id].Status = "resolved"
 	}
 	if len(missing) > 0 {
 		return invalid("completion", "尚未满足完工条件："+strings.Join(missing, "、"))
@@ -519,6 +513,23 @@ func (c *CareCase) openNonconformities() map[string]*Nonconformity {
 			item := &c.Acceptances[i].Items[j]
 			if item.Status == "pending" {
 				result[item.ID] = item
+			}
+		}
+	}
+	return result
+}
+
+func remediationBatches(open map[string]*Nonconformity, executions []ExecutionRecord) map[string][]int {
+	result := make(map[string][]int, len(open))
+	for id := range open {
+		for _, execution := range executions {
+			if len(execution.EvidenceRefs) == 0 {
+				continue
+			}
+			for _, remediation := range execution.Remediations {
+				if remediation.NonconformityID == id {
+					result[id] = append(result[id], execution.BatchNumber)
+				}
 			}
 		}
 	}
